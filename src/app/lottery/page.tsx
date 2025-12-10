@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import Confetti from '@/components/Confetti'
 import Sparkles from '@/components/Sparkles'
 import Header from '@/components/Header'
+import { SkeletonRankingCard, Spinner } from '@/components/Skeleton'
 import { EVENT_INFO } from '@/lib/constants'
 
 interface FoodRanking {
@@ -335,13 +336,16 @@ export default function LotteryPage() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.2 }}
               >
-                <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2">
+                <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-3">
                   <span>📊</span> 현재 추천 현황
+                  {isLoading && <Spinner size="sm" />}
                 </h2>
 
                 {isLoading ? (
-                  <div className="text-center py-8 text-gray-400">
-                    로딩 중...
+                  <div className="space-y-3">
+                    <SkeletonRankingCard />
+                    <SkeletonRankingCard />
+                    <SkeletonRankingCard />
                   </div>
                 ) : rankings.length === 0 ? (
                   <p className="text-gray-400 text-center py-8">

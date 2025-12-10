@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Sparkles from '@/components/Sparkles'
 import Header from '@/components/Header'
+import { SkeletonCard, Spinner } from '@/components/Skeleton'
 import { useUserStore } from '@/lib/store'
 import { generateFoodTags } from '@/lib/foodTagger'
 
@@ -25,6 +26,7 @@ export default function RecommendPage() {
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [bonusMessage, setBonusMessage] = useState('')
   const [isHydrated, setIsHydrated] = useState(false)
+  const [isLoadingList, setIsLoadingList] = useState(true)
   const router = useRouter()
   const { userId, userName } = useUserStore()
 
@@ -37,6 +39,7 @@ export default function RecommendPage() {
   }, [])
 
   const fetchRecommendations = async () => {
+    setIsLoadingList(true)
     try {
       const res = await fetch('/api/recommendations', {
         cache: 'no-store',
@@ -50,6 +53,8 @@ export default function RecommendPage() {
       }
     } catch (err) {
       console.error('Failed to fetch recommendations:', err)
+    } finally {
+      setIsLoadingList(false)
     }
   }
 
@@ -252,11 +257,18 @@ export default function RecommendPage() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.4 }}
           >
-            <h2 className="text-2xl font-bold mb-6 text-white">
-              지금까지 추천된 음식 ({recommendations.length}개)
+            <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-3">
+              지금까지 추천된 음식 ({isLoadingList ? '-' : recommendations.length}개)
+              {isLoadingList && <Spinner size="sm" />}
             </h2>
 
-            {recommendations.length === 0 ? (
+            {isLoadingList ? (
+              <div className="space-y-4">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
+              </div>
+            ) : recommendations.length === 0 ? (
               <p className="text-gray-400 text-center py-8">
                 아직 추천된 음식이 없어요. 첫 번째로 추천해주세요!
               </p>
