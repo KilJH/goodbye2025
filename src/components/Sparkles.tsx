@@ -29,7 +29,7 @@ export default function Sparkles() {
   }, [])
 
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0 safe-area-expand">
+    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
       {sparkles.map((sparkle) => (
         <motion.div
           key={sparkle.id}
