@@ -19,11 +19,8 @@ export default function Header() {
   if (!userName) return null
 
   return (
-    <div
-      className="sticky top-0 left-0 right-0 z-50 backdrop-blur-md"
-      style={{ backgroundColor: 'rgba(26, 26, 46, 0.9)' }}
-    >
-      <div className="flex justify-between items-center py-3 px-4">
+    <div className="fixed top-0 left-0 right-0 z-50 pt-[env(safe-area-inset-top)]">
+      <div className="flex justify-between items-center px-4 py-3">
         <a href="/" className="text-lg font-bold gradient-text">
           GOODBYE 2025
         </a>

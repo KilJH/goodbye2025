@@ -137,21 +137,18 @@ export default function RecommendPage() {
 
   if (!isHydrated) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="bg-fixed-full" />
+      <div className="min-h-screen bg-gradient-party flex items-center justify-center">
         <div className="text-2xl text-white">로딩 중...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen relative overflow-hidden">
-      <div className="bg-fixed-full" />
+    <div className="min-h-screen bg-gradient-party relative overflow-hidden">
       <Sparkles />
-
       <Header />
 
-      <div className="relative z-10 pb-8 px-4">
+      <div className="relative z-10 min-h-screen pt-20 pb-8 px-4">
         <div className="max-w-2xl mx-auto">
           {/* 헤더 */}
           <motion.div
