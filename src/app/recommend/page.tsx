@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Sparkles from '@/components/Sparkles'
@@ -9,12 +9,12 @@ import { SkeletonCard, Spinner } from '@/components/Skeleton'
 import { useUserStore } from '@/lib/store'
 import { generateFoodTags } from '@/lib/foodTagger'
 
-interface Recommendation {
-  id: string
+interface GroupedRecommendation {
   foodName: string
   tags: string[]
-  userName: string
-  createdAt: string
+  recommenders: string[]
+  count: number
+  latestAt: string
 }
 
 export default function RecommendPage() {
@@ -23,23 +23,23 @@ export default function RecommendPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
-  const [recommendations, setRecommendations] = useState<Recommendation[]>([])
+  const [recommendations, setRecommendations] = useState<GroupedRecommendation[]>([])
   const [bonusMessage, setBonusMessage] = useState('')
   const [isHydrated, setIsHydrated] = useState(false)
   const [isLoadingList, setIsLoadingList] = useState(true)
+  const [newlyAddedFood, setNewlyAddedFood] = useState<string | null>(null)
+  const [totalCount, setTotalCount] = useState(0)
   const router = useRouter()
   const { userId, userName } = useUserStore()
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const prevFoodNamesRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     setIsHydrated(true)
   }, [])
 
-  useEffect(() => {
-    fetchRecommendations()
-  }, [])
-
-  const fetchRecommendations = async () => {
-    setIsLoadingList(true)
+  const fetchRecommendations = useCallback(async (isInitial = false) => {
+    if (isInitial) setIsLoadingList(true)
     try {
       const res = await fetch('/api/recommendations', {
         cache: 'no-store',
@@ -49,14 +49,52 @@ export default function RecommendPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        setRecommendations(data)
+        const newRecs = data.recommendations as GroupedRecommendation[]
+
+        // 새로 추가된 음식 감지 (초기 로드가 아닐 때)
+        if (!isInitial && prevFoodNamesRef.current.size > 0) {
+          const currentFoodNames = new Set(newRecs.map(r => r.foodName))
+          for (const rec of newRecs) {
+            // 새로운 음식이거나 추천자 수가 변경된 경우
+            const prevRec = recommendations.find(r => r.foodName === rec.foodName)
+            if (!prevFoodNamesRef.current.has(rec.foodName) ||
+                (prevRec && prevRec.recommenders.length < rec.recommenders.length)) {
+              setNewlyAddedFood(rec.foodName)
+              setTimeout(() => setNewlyAddedFood(null), 2000)
+              break
+            }
+          }
+        }
+
+        // 현재 음식 이름들 저장
+        prevFoodNamesRef.current = new Set(newRecs.map(r => r.foodName))
+        setRecommendations(newRecs)
+        setTotalCount(data.totalCount)
       }
     } catch (err) {
       console.error('Failed to fetch recommendations:', err)
     } finally {
-      setIsLoadingList(false)
+      if (isInitial) setIsLoadingList(false)
     }
-  }
+  }, [recommendations])
+
+  // 초기 로드
+  useEffect(() => {
+    fetchRecommendations(true)
+  }, [])
+
+  // 실시간 polling (3초마다)
+  useEffect(() => {
+    pollingRef.current = setInterval(() => {
+      fetchRecommendations(false)
+    }, 3000)
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+    }
+  }, [fetchRecommendations])
 
   // 음식 이름이 변경될 때마다 태그 생성
   useEffect(() => {
@@ -109,7 +147,10 @@ export default function RecommendPage() {
       }
       setFoodName('')
       setTags([])
-      fetchRecommendations()
+      // 즉시 새로고침 (새로 추가된 음식 하이라이트를 위해)
+      setNewlyAddedFood(data.foodName)
+      fetchRecommendations(false)
+      setTimeout(() => setNewlyAddedFood(null), 2000)
     } catch (err) {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다')
     } finally {
@@ -258,8 +299,14 @@ export default function RecommendPage() {
             transition={{ delay: 0.4 }}
           >
             <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-3">
-              지금까지 추천된 음식 ({isLoadingList ? '-' : recommendations.length}개)
+              <span>지금까지 추천된 음식</span>
+              <span className="text-lg font-normal text-gray-400">
+                ({isLoadingList ? '-' : recommendations.length}종 / 총 {totalCount}개 추천)
+              </span>
               {isLoadingList && <Spinner size="sm" />}
+              {!isLoadingList && (
+                <span className="text-xs text-green-400 animate-pulse">● 실시간</span>
+              )}
             </h2>
 
             {isLoadingList ? (
@@ -274,30 +321,69 @@ export default function RecommendPage() {
               </p>
             ) : (
               <div className="space-y-4">
-                {recommendations.map((rec, index) => (
-                  <motion.div
-                    key={rec.id}
-                    className="bg-white/5 rounded-xl p-4 border border-white/10"
-                    initial={{ opacity: 0, x: -20 }}
-                    animate={{ opacity: 1, x: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                  >
-                    <div className="flex justify-between items-start mb-2">
-                      <h3 className="text-xl font-semibold text-white">{rec.foodName}</h3>
-                      <span className="text-sm text-gray-400">{rec.userName}</span>
-                    </div>
-                    <div className="flex flex-wrap gap-2">
-                      {rec.tags.map((tag) => (
-                        <span
-                          key={tag}
-                          className={`px-2 py-0.5 rounded-full text-xs border ${getTagColor(tag)}`}
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-                  </motion.div>
-                ))}
+                <AnimatePresence mode="popLayout">
+                  {recommendations.map((rec) => (
+                    <motion.div
+                      key={rec.foodName}
+                      layout
+                      className={`bg-white/5 rounded-xl p-4 border transition-all ${
+                        newlyAddedFood === rec.foodName
+                          ? 'border-yellow-400 bg-yellow-400/10 ring-2 ring-yellow-400/50'
+                          : 'border-white/10'
+                      }`}
+                      initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                      animate={{
+                        opacity: 1,
+                        scale: 1,
+                        y: 0,
+                        transition: {
+                          type: 'spring',
+                          stiffness: 500,
+                          damping: 30,
+                        },
+                      }}
+                      exit={{ opacity: 0, scale: 0.8, x: -100 }}
+                    >
+                      <div className="flex justify-between items-start mb-2">
+                        <div className="flex items-center gap-3">
+                          <h3 className="text-xl font-semibold text-white">{rec.foodName}</h3>
+                          {rec.count > 1 && (
+                            <span className="px-2 py-0.5 bg-yellow-400/20 text-yellow-300 rounded-full text-sm font-medium">
+                              {rec.count}명 추천
+                            </span>
+                          )}
+                          {newlyAddedFood === rec.foodName && (
+                            <motion.span
+                              className="px-2 py-0.5 bg-green-400/20 text-green-300 rounded-full text-xs"
+                              initial={{ opacity: 0, scale: 0 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0 }}
+                            >
+                              NEW!
+                            </motion.span>
+                          )}
+                        </div>
+                        <div className="text-right">
+                          <p className="text-sm text-gray-400">
+                            {rec.recommenders.length > 3
+                              ? `${rec.recommenders.slice(0, 3).join(', ')} 외 ${rec.recommenders.length - 3}명`
+                              : rec.recommenders.join(', ')}
+                          </p>
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {rec.tags.map((tag) => (
+                          <span
+                            key={tag}
+                            className={`px-2 py-0.5 rounded-full text-xs border ${getTagColor(tag)}`}
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               </div>
             )}
           </motion.div>

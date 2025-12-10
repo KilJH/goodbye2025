@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { findSimilarFood } from '@/lib/foodTagger'
+import { findSimilarFood, isSameFood } from '@/lib/foodTagger'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
+
+interface GroupedRecommendation {
+  foodName: string
+  tags: string[]
+  recommenders: string[]
+  count: number
+  latestAt: string
+}
 
 export async function GET() {
   try {
@@ -16,15 +24,53 @@ export async function GET() {
       orderBy: { createdAt: 'desc' },
     })
 
-    return NextResponse.json(
-      recommendations.map((rec) => ({
-        id: rec.id,
-        foodName: rec.foodName,
-        tags: rec.tags,
-        userName: rec.user.name,
-        createdAt: rec.createdAt.toISOString(),
+    // 음식별로 그룹화 (유사한 이름도 같은 그룹으로)
+    const foodGroups: {
+      representativeName: string
+      tags: string[]
+      recommenders: Set<string>
+      count: number
+      latestAt: Date
+    }[] = []
+
+    for (const rec of recommendations) {
+      // 기존 그룹에서 유사한 음식 찾기
+      let foundGroup = foodGroups.find(group => isSameFood(group.representativeName, rec.foodName))
+
+      if (foundGroup) {
+        foundGroup.count++
+        foundGroup.recommenders.add(rec.user.name)
+        if (rec.createdAt > foundGroup.latestAt) {
+          foundGroup.latestAt = rec.createdAt
+          foundGroup.tags = rec.tags
+        }
+      } else {
+        // 새 그룹 생성
+        foodGroups.push({
+          representativeName: rec.foodName,
+          tags: rec.tags,
+          recommenders: new Set([rec.user.name]),
+          count: 1,
+          latestAt: rec.createdAt,
+        })
+      }
+    }
+
+    // 그룹화된 결과를 배열로 변환 (최신순 정렬)
+    const grouped: GroupedRecommendation[] = foodGroups
+      .map((group) => ({
+        foodName: group.representativeName,
+        tags: group.tags,
+        recommenders: Array.from(group.recommenders),
+        count: group.count,
+        latestAt: group.latestAt.toISOString(),
       }))
-    )
+      .sort((a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime())
+
+    return NextResponse.json({
+      recommendations: grouped,
+      totalCount: recommendations.length,
+    })
   } catch (error) {
     console.error('Get recommendations error:', error)
     return NextResponse.json(

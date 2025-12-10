@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Confetti from '@/components/Confetti'
 import Sparkles from '@/components/Sparkles'
@@ -24,6 +24,9 @@ export default function LotteryPage() {
   const [lotteryResult, setLotteryResult] = useState<FoodRanking[]>([])
   const [showResult, setShowResult] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const [updatedFoods, setUpdatedFoods] = useState<Set<string>>(new Set())
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const prevRankingsRef = useRef<Map<string, number>>(new Map())
 
   // 시간 체크
   useEffect(() => {
@@ -51,12 +54,8 @@ export default function LotteryPage() {
     return () => clearInterval(interval)
   }, [])
 
-  // 데이터 로드
-  useEffect(() => {
-    fetchRankings()
-  }, [])
-
-  const fetchRankings = async () => {
+  // fetchRankings를 useCallback으로 메모이제이션
+  const fetchRankings = useCallback(async (isInitial = false) => {
     try {
       const res = await fetch('/api/lottery', {
         cache: 'no-store',
@@ -66,16 +65,54 @@ export default function LotteryPage() {
       })
       const data = await res.json()
       if (res.ok) {
-        setRankings(data.rankings || [])
+        const newRankings = data.rankings || []
+
+        // 변경된 음식 감지 (초기 로드가 아닐 때)
+        if (!isInitial && prevRankingsRef.current.size > 0) {
+          const updated = new Set<string>()
+          for (const ranking of newRankings) {
+            const prevVoteCount = prevRankingsRef.current.get(ranking.foodName)
+            // 새로운 음식이거나 득표수가 변경된 경우
+            if (prevVoteCount === undefined || prevVoteCount !== ranking.voteCount) {
+              updated.add(ranking.foodName)
+            }
+          }
+          if (updated.size > 0) {
+            setUpdatedFoods(updated)
+            setTimeout(() => setUpdatedFoods(new Set()), 2000)
+          }
+        }
+
+        // 현재 상태 저장
+        prevRankingsRef.current = new Map(newRankings.map((r: FoodRanking) => [r.foodName, r.voteCount]))
+        setRankings(newRankings)
       } else {
         console.error('API error:', data.error)
       }
     } catch (err) {
       console.error('Failed to fetch rankings:', err)
     } finally {
-      setIsLoading(false)
+      if (isInitial) setIsLoading(false)
     }
-  }
+  }, [])
+
+  // 초기 데이터 로드
+  useEffect(() => {
+    fetchRankings(true)
+  }, [fetchRankings])
+
+  // 실시간 polling (3초마다)
+  useEffect(() => {
+    pollingRef.current = setInterval(() => {
+      fetchRankings(false)
+    }, 3000)
+
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+    }
+  }, [fetchRankings])
 
   // 가중치 기반 랜덤 순위 리스트 생성
   const runLottery = useCallback(() => {
@@ -339,6 +376,9 @@ export default function LotteryPage() {
                 <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-3">
                   <span>📊</span> 현재 추천 현황
                   {isLoading && <Spinner size="sm" />}
+                  {!isLoading && (
+                    <span className="text-xs text-green-400 animate-pulse">● 실시간</span>
+                  )}
                 </h2>
 
                 {isLoading ? (
@@ -353,51 +393,84 @@ export default function LotteryPage() {
                   </p>
                 ) : (
                   <div className="space-y-3">
-                    {rankings.map((ranking, index) => (
-                      <motion.div
-                        key={ranking.foodName}
-                        className={`relative overflow-hidden rounded-xl p-4 ${
-                          ranking.voteCount >= 5
-                            ? 'border-2 border-yellow-400'
-                            : 'border border-white/10'
-                        }`}
-                        initial={{ opacity: 0, x: -20 }}
-                        animate={{ opacity: 1, x: 0 }}
-                        transition={{ delay: index * 0.05 }}
-                      >
-                        {/* 배경 바 */}
-                        <div
-                          className={`absolute inset-0 bg-gradient-to-r ${getRankColor(ranking.rank)} opacity-20`}
-                          style={{ width: `${ranking.probability * 100}%` }}
-                        />
+                    <AnimatePresence mode="popLayout">
+                      {rankings.map((ranking) => (
+                        <motion.div
+                          key={ranking.foodName}
+                          layout
+                          className={`relative overflow-hidden rounded-xl p-4 transition-all ${
+                            ranking.voteCount >= 5
+                              ? 'border-2 border-yellow-400'
+                              : updatedFoods.has(ranking.foodName)
+                              ? 'border-2 border-green-400 ring-2 ring-green-400/50'
+                              : 'border border-white/10'
+                          }`}
+                          initial={{ opacity: 0, scale: 0.8, y: -20 }}
+                          animate={{
+                            opacity: 1,
+                            scale: 1,
+                            y: 0,
+                            transition: {
+                              type: 'spring',
+                              stiffness: 500,
+                              damping: 30,
+                            },
+                          }}
+                          exit={{ opacity: 0, scale: 0.8, x: -100 }}
+                        >
+                          {/* 배경 바 */}
+                          <motion.div
+                            className={`absolute inset-0 bg-gradient-to-r ${getRankColor(ranking.rank)} opacity-20`}
+                            initial={{ width: 0 }}
+                            animate={{ width: `${ranking.probability * 100}%` }}
+                            transition={{ duration: 0.5 }}
+                          />
 
-                        <div className="relative flex items-center justify-between">
-                          <div className="flex items-center gap-4">
-                            <div>
-                              <h3 className="text-lg font-bold text-white">
-                                {ranking.foodName}
-                                {ranking.voteCount >= 5 && (
-                                  <span className="ml-2 text-xs bg-yellow-400 text-black px-2 py-0.5 rounded-full">
-                                    필수 상위권
-                                  </span>
-                                )}
-                              </h3>
+                          <div className="relative flex items-center justify-between">
+                            <div className="flex items-center gap-4">
+                              <div>
+                                <h3 className="text-lg font-bold text-white flex items-center gap-2">
+                                  {ranking.foodName}
+                                  {ranking.voteCount >= 5 && (
+                                    <span className="text-xs bg-yellow-400 text-black px-2 py-0.5 rounded-full">
+                                      필수 상위권
+                                    </span>
+                                  )}
+                                  {updatedFoods.has(ranking.foodName) && (
+                                    <motion.span
+                                      className="text-xs bg-green-400/20 text-green-300 px-2 py-0.5 rounded-full"
+                                      initial={{ opacity: 0, scale: 0 }}
+                                      animate={{ opacity: 1, scale: 1 }}
+                                    >
+                                      업데이트!
+                                    </motion.span>
+                                  )}
+                                </h3>
+                                <p className="text-sm text-gray-400">
+                                  추천: {ranking.voters.length > 3
+                                    ? `${ranking.voters.slice(0, 3).join(', ')} 외 ${ranking.voters.length - 3}명`
+                                    : ranking.voters.join(', ')}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <motion.p
+                                className="text-lg font-bold text-white"
+                                key={ranking.voteCount}
+                                initial={{ scale: 1.5, color: '#4ade80' }}
+                                animate={{ scale: 1, color: '#ffffff' }}
+                                transition={{ duration: 0.3 }}
+                              >
+                                {ranking.voteCount}표
+                              </motion.p>
                               <p className="text-sm text-gray-400">
-                                추천: {ranking.voters.join(', ')}
+                                확률 {(ranking.probability * 100).toFixed(1)}%
                               </p>
                             </div>
                           </div>
-                          <div className="text-right">
-                            <p className="text-lg font-bold text-white">
-                              {ranking.voteCount}표
-                            </p>
-                            <p className="text-sm text-gray-400">
-                              확률 {(ranking.probability * 100).toFixed(1)}%
-                            </p>
-                          </div>
-                        </div>
-                      </motion.div>
-                    ))}
+                        </motion.div>
+                      ))}
+                    </AnimatePresence>
                   </div>
                 )}
 
