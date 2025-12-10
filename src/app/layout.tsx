@@ -13,10 +13,10 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GOODBYE 2024 - 송년회",
+  title: "GOODBYE 2025 - 송년회",
   description: "친구들과 함께하는 송년회! 음식을 추천하고 제비뽑기로 오늘의 메뉴를 정해보세요.",
   openGraph: {
-    title: "GOODBYE 2024 - 송년회",
+    title: "GOODBYE 2025 - 송년회",
     description: "친구들과 함께하는 송년회! 음식을 추천하고 제비뽑기로 오늘의 메뉴를 정해보세요.",
     type: "website",
   },

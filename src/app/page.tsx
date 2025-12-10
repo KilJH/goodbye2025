@@ -78,7 +78,7 @@ export default function Home() {
                 animate={{ y: 0, opacity: 1 }}
                 transition={{ delay: 0.2, duration: 0.8 }}
               >
-                GOODBYE 2024
+                GOODBYE 2025
               </motion.h1>
 
               {/* 서브타이틀 */}
