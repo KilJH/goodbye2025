@@ -13,15 +13,21 @@ export default function Home() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [showForm, setShowForm] = useState(false)
+  const [isHydrated, setIsHydrated] = useState(false)
   const router = useRouter()
   const { setUser, userName, userId } = useUserStore()
 
+  // Hydration 완료 체크
   useEffect(() => {
-    // 이미 로그인한 경우 음식 추천 페이지로 이동
-    if (userId && userName) {
+    setIsHydrated(true)
+  }, [])
+
+  // 이미 로그인한 경우 바로 음식 추천 페이지로 이동
+  useEffect(() => {
+    if (isHydrated && userId && userName) {
       router.push('/recommend')
     }
-  }, [userId, userName, router])
+  }, [isHydrated, userId, userName, router])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -55,12 +61,21 @@ export default function Home() {
     }
   }
 
+  // Hydration 전에는 로딩 표시
+  if (!isHydrated) {
+    return (
+      <div className="min-h-screen bg-gradient-party flex items-center justify-center">
+        <div className="text-2xl text-white">로딩 중...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-party relative overflow-hidden">
       <Confetti />
       <Sparkles />
 
-      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4">
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center px-4 pb-safe">
         <AnimatePresence mode="wait">
           {!showForm ? (
             <motion.div
@@ -227,7 +242,7 @@ export default function Home() {
 
         {/* 네비게이션 링크 */}
         <motion.div
-          className="absolute bottom-8 flex gap-6"
+          className="absolute bottom-8 flex gap-6 pb-safe"
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1.5 }}

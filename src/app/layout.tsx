@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -20,6 +20,19 @@ export const metadata: Metadata = {
     description: "친구들과 함께하는 송년회! 음식을 추천하고 제비뽑기로 오늘의 메뉴를 정해보세요.",
     type: "website",
   },
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "black-translucent",
+    title: "GOODBYE 2025",
+  },
+};
+
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  viewportFit: "cover",
+  themeColor: "#0f0f1a",
 };
 
 export default function RootLayout({

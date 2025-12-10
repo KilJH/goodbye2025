@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Sparkles from '@/components/Sparkles'
+import Header from '@/components/Header'
 import { useUserStore } from '@/lib/store'
 import { generateFoodTags } from '@/lib/foodTagger'
 
@@ -18,14 +19,18 @@ interface Recommendation {
 export default function RecommendPage() {
   const [foodName, setFoodName] = useState('')
   const [tags, setTags] = useState<string[]>([])
-  const [isLoading, setIsLoading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [success, setSuccess] = useState('')
   const [recommendations, setRecommendations] = useState<Recommendation[]>([])
   const [bonusMessage, setBonusMessage] = useState('')
+  const [isHydrated, setIsHydrated] = useState(false)
   const router = useRouter()
   const { userId, userName } = useUserStore()
+
+  useEffect(() => {
+    setIsHydrated(true)
+  }, [])
 
   useEffect(() => {
     fetchRecommendations()
@@ -120,11 +125,20 @@ export default function RecommendPage() {
     return colorMap[tag] || 'bg-gray-500/20 text-gray-300 border-gray-500/30'
   }
 
+  if (!isHydrated) {
+    return (
+      <div className="min-h-screen bg-gradient-party flex items-center justify-center">
+        <div className="text-2xl text-white">로딩 중...</div>
+      </div>
+    )
+  }
+
   return (
     <div className="min-h-screen bg-gradient-party relative overflow-hidden">
       <Sparkles />
+      <Header />
 
-      <div className="relative z-10 min-h-screen py-12 px-4">
+      <div className="relative z-10 min-h-screen pt-20 pb-8 px-4">
         <div className="max-w-2xl mx-auto">
           {/* 헤더 */}
           <motion.div
@@ -273,7 +287,7 @@ export default function RecommendPage() {
 
           {/* 네비게이션 */}
           <motion.div
-            className="flex justify-center gap-6 mt-8"
+            className="flex justify-center gap-6 mt-8 pb-safe"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.6 }}

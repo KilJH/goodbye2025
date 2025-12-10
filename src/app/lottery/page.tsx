@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Confetti from '@/components/Confetti'
 import Sparkles from '@/components/Sparkles'
+import Header from '@/components/Header'
 import { EVENT_INFO } from '@/lib/constants'
 
 interface FoodRanking {
@@ -156,8 +157,9 @@ export default function LotteryPage() {
     <div className="min-h-screen bg-gradient-party relative overflow-hidden">
       {showResult && <Confetti />}
       <Sparkles />
+      <Header />
 
-      <div className="relative z-10 min-h-screen py-12 px-4">
+      <div className="relative z-10 min-h-screen pt-20 pb-8 px-4">
         <div className="max-w-2xl mx-auto">
           {/* 헤더 */}
           <motion.div
@@ -400,7 +402,7 @@ export default function LotteryPage() {
 
           {/* 네비게이션 */}
           <motion.div
-            className="flex justify-center gap-6 mt-8"
+            className="flex justify-center gap-6 mt-8 pb-safe"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             transition={{ delay: 0.4 }}
