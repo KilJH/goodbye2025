@@ -13,6 +13,7 @@ html {
   height: -webkit-fill-available;
   -webkit-text-size-adjust: none; /* 회전 시 글꼴 자동 확대 방지 */
   text-size-adjust: none;
+  background-color: #1a1a2e;
 }
 
 /* 폼 요소 iOS 기본 스타일 제거 */
@@ -32,7 +33,7 @@ a, button, input, select, textarea {
 /* ===== 프로젝트 변수 ===== */
 
 :root {
-  --background: #0f0f1a;
+  --background: #1a1a2e;
   --foreground: #ffffff;
 }
 
