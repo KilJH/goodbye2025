@@ -1,0 +1,42 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// 사용자 모델 - 이름으로 접근 권한 획득
+model User {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  createdAt DateTime @default(now())
+
+  recommendations FoodRecommendation[]
+}
+
+// 음식 추천 모델
+model FoodRecommendation {
+  id        String   @id @default(cuid())
+  foodName  String
+  tags      String[] // AI가 생성한 태그들
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@index([foodName])
+}
+
+// 제비뽑기 결과 모델
+model LotteryResult {
+  id          String   @id @default(cuid())
+  foodName    String
+  rank        Int
+  voteCount   Int
+  probability Float
+  createdAt   DateTime @default(now())
+}
