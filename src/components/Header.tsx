@@ -19,8 +19,20 @@ export default function Header() {
   if (!userName) return null
 
   return (
-    <div className="fixed top-0 left-0 right-0 z-50 bg-[#1a1a2e]/80 backdrop-blur-md pt-[env(safe-area-inset-top)]">
-      <div className="flex justify-between items-center px-4 py-3 pl-[env(safe-area-inset-left)] pr-[env(safe-area-inset-right)]">
+    <div
+      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md"
+      style={{
+        backgroundColor: 'rgba(26, 26, 46, 0.9)',
+        paddingTop: 'env(safe-area-inset-top)',
+      }}
+    >
+      <div
+        className="flex justify-between items-center py-3"
+        style={{
+          paddingLeft: 'calc(env(safe-area-inset-left) + 16px)',
+          paddingRight: 'calc(env(safe-area-inset-right) + 16px)',
+        }}
+      >
         <a href="/" className="text-lg font-bold gradient-text">
           GOODBYE 2025
         </a>
