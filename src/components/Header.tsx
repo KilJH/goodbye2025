@@ -20,10 +20,10 @@ export default function Header() {
 
   return (
     <div
-      className="fixed top-0 left-0 right-0 z-50 backdrop-blur-md"
+      className="sticky left-0 right-0 z-50 backdrop-blur-md"
       style={{
         backgroundColor: 'rgba(26, 26, 46, 0.9)',
-        paddingTop: 'env(safe-area-inset-top)',
+        top: 'env(safe-area-inset-top)',
       }}
     >
       <div
