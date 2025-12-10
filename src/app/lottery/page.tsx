@@ -167,12 +167,9 @@ export default function LotteryPage() {
       {showResult && <Confetti />}
       <Sparkles />
 
-      {/* safe-area 상단 패딩 */}
-      <div style={{ paddingTop: 'env(safe-area-inset-top)' }} />
-
       <Header />
 
-      <div className="relative z-10 pb-8 px-4" style={{ paddingLeft: 'env(safe-area-inset-left)', paddingRight: 'env(safe-area-inset-right)' }}>
+      <div className="relative z-10 pb-8 px-4">
         <div className="max-w-2xl mx-auto">
           {/* 헤더 */}
           <motion.div
