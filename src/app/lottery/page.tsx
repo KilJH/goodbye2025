@@ -162,7 +162,8 @@ export default function LotteryPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-party relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
+      <div className="bg-fixed-full" />
       {showResult && <Confetti />}
       <Sparkles />
       <Header />

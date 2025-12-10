@@ -64,14 +64,17 @@ export default function Home() {
   // Hydration 전에는 로딩 표시
   if (!isHydrated) {
     return (
-      <div className="min-h-screen bg-gradient-party flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-fixed-full" />
         <div className="text-2xl text-white">로딩 중...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-party relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
+      {/* 배경 고정 레이어 - safe area까지 확장 */}
+      <div className="bg-fixed-full" />
       <Confetti />
       <Sparkles />
 

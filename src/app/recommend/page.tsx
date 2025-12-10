@@ -137,14 +137,16 @@ export default function RecommendPage() {
 
   if (!isHydrated) {
     return (
-      <div className="min-h-screen bg-gradient-party flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="bg-fixed-full" />
         <div className="text-2xl text-white">로딩 중...</div>
       </div>
     )
   }
 
   return (
-    <div className="min-h-screen bg-gradient-party relative overflow-hidden">
+    <div className="min-h-screen relative overflow-hidden">
+      <div className="bg-fixed-full" />
       <Sparkles />
       <Header />
 
