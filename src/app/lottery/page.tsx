@@ -19,7 +19,7 @@ export default function LotteryPage() {
   const [timeRemaining, setTimeRemaining] = useState('')
   const [rankings, setRankings] = useState<FoodRanking[]>([])
   const [isSpinning, setIsSpinning] = useState(false)
-  const [selectedFood, setSelectedFood] = useState<FoodRanking | null>(null)
+  const [lotteryResult, setLotteryResult] = useState<FoodRanking[]>([])
   const [showResult, setShowResult] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
 
@@ -68,33 +68,58 @@ export default function LotteryPage() {
     }
   }
 
-  // 제비뽑기 실행
+  // 가중치 기반 랜덤 순위 리스트 생성
   const runLottery = useCallback(() => {
     if (rankings.length === 0 || isSpinning) return
 
     setIsSpinning(true)
     setShowResult(false)
 
-    // 확률에 따라 랜덤 선택
-    const totalProbability = rankings.reduce((sum, r) => sum + r.probability, 0)
-    let random = Math.random() * totalProbability
-    let selected: FoodRanking | null = null
+    // 5인 이상 득표 음식은 무조건 상위에 배치
+    const mustTop = rankings.filter(r => r.voteCount >= 5)
+    const others = rankings.filter(r => r.voteCount < 5)
 
-    for (const ranking of rankings) {
-      random -= ranking.probability
-      if (random <= 0) {
-        selected = ranking
-        break
+    // 가중치 기반 셔플 함수
+    const weightedShuffle = (items: FoodRanking[]): FoodRanking[] => {
+      const result: FoodRanking[] = []
+      const remaining = [...items]
+
+      while (remaining.length > 0) {
+        const totalWeight = remaining.reduce((sum, r) => sum + r.probability, 0)
+        let random = Math.random() * totalWeight
+
+        for (let i = 0; i < remaining.length; i++) {
+          random -= remaining[i].probability
+          if (random <= 0) {
+            result.push(remaining[i])
+            remaining.splice(i, 1)
+            break
+          }
+        }
+
+        // 안전장치
+        if (random > 0 && remaining.length > 0) {
+          result.push(remaining[0])
+          remaining.splice(0, 1)
+        }
       }
+
+      return result
     }
 
-    if (!selected) {
-      selected = rankings[0]
-    }
+    // 5인 이상은 그들끼리 셔플, 나머지도 가중치 기반 셔플
+    const shuffledMustTop = weightedShuffle(mustTop)
+    const shuffledOthers = weightedShuffle(others)
+
+    // 최종 결과: 5인 이상 먼저, 그다음 나머지
+    const finalResult = [...shuffledMustTop, ...shuffledOthers].map((item, index) => ({
+      ...item,
+      rank: index + 1
+    }))
 
     // 애니메이션 후 결과 표시
     setTimeout(() => {
-      setSelectedFood(selected)
+      setLotteryResult(finalResult)
       setIsSpinning(false)
       setShowResult(true)
     }, 3000)
@@ -144,7 +169,7 @@ export default function LotteryPage() {
               제비뽑기
             </h1>
             <p className="text-gray-400">
-              추천된 음식 중 오늘의 메뉴를 뽑아보세요!
+              추천된 음식들의 우선순위를 랜덤으로 뽑아보세요!
             </p>
           </motion.div>
 
@@ -196,39 +221,73 @@ export default function LotteryPage() {
                       >
                         🎰
                       </motion.div>
-                      <p className="text-2xl text-white font-bold">뽑는 중...</p>
+                      <p className="text-2xl text-white font-bold">순위 뽑는 중...</p>
                     </motion.div>
-                  ) : showResult && selectedFood ? (
+                  ) : showResult && lotteryResult.length > 0 ? (
                     <motion.div
                       key="result"
                       initial={{ opacity: 0, scale: 0.5 }}
                       animate={{ opacity: 1, scale: 1 }}
-                      className="py-8"
+                      className="py-4"
                     >
                       <motion.div
-                        className="text-8xl mb-4"
+                        className="text-6xl mb-4"
                         initial={{ scale: 0 }}
                         animate={{ scale: 1 }}
                         transition={{ type: 'spring', stiffness: 200 }}
                       >
                         🎉
                       </motion.div>
-                      <h2 className="text-3xl font-bold gradient-text mb-2">
-                        당첨!
+                      <h2 className="text-2xl font-bold gradient-text mb-6">
+                        오늘의 메뉴 우선순위!
                       </h2>
-                      <p className="text-4xl font-bold text-white mb-4">
-                        {selectedFood.foodName}
-                      </p>
-                      <p className="text-gray-400">
-                        {selectedFood.voteCount}명이 추천 |
-                        확률 {(selectedFood.probability * 100).toFixed(1)}%
-                      </p>
+
+                      {/* 결과 리스트 */}
+                      <div className="space-y-3 text-left mb-6">
+                        {lotteryResult.map((item, index) => (
+                          <motion.div
+                            key={item.foodName}
+                            className={`relative overflow-hidden rounded-xl p-4 ${
+                              index === 0
+                                ? 'border-2 border-yellow-400 bg-yellow-400/10'
+                                : index < 3
+                                ? 'border border-white/20 bg-white/5'
+                                : 'border border-white/10 bg-white/5'
+                            }`}
+                            initial={{ opacity: 0, x: -50 }}
+                            animate={{ opacity: 1, x: 0 }}
+                            transition={{ delay: index * 0.15 }}
+                          >
+                            <div className="flex items-center justify-between">
+                              <div className="flex items-center gap-4">
+                                <span className={`text-2xl ${index === 0 ? 'animate-bounce' : ''}`}>
+                                  {getRankBadge(index + 1)}
+                                </span>
+                                <div>
+                                  <h3 className={`text-lg font-bold ${index === 0 ? 'text-yellow-400' : 'text-white'}`}>
+                                    {item.foodName}
+                                  </h3>
+                                  <p className="text-sm text-gray-400">
+                                    {item.voteCount}명 추천
+                                    {item.voteCount >= 5 && (
+                                      <span className="ml-2 text-xs bg-yellow-400 text-black px-2 py-0.5 rounded-full">
+                                        필수
+                                      </span>
+                                    )}
+                                  </p>
+                                </div>
+                              </div>
+                            </div>
+                          </motion.div>
+                        ))}
+                      </div>
+
                       <motion.button
                         onClick={() => {
                           setShowResult(false)
-                          setSelectedFood(null)
+                          setLotteryResult([])
                         }}
-                        className="mt-6 bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-8 rounded-xl transition-all"
+                        className="bg-white/10 hover:bg-white/20 text-white font-semibold py-3 px-8 rounded-xl transition-all"
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
@@ -242,6 +301,10 @@ export default function LotteryPage() {
                       animate={{ opacity: 1 }}
                     >
                       <div className="text-8xl mb-6">🎲</div>
+                      <p className="text-gray-400 mb-6">
+                        버튼을 누르면 추천된 음식들의<br />
+                        우선순위가 랜덤으로 결정됩니다!
+                      </p>
                       <motion.button
                         onClick={runLottery}
                         disabled={rankings.length === 0}
@@ -249,14 +312,14 @@ export default function LotteryPage() {
                         whileHover={{ scale: 1.05 }}
                         whileTap={{ scale: 0.95 }}
                       >
-                        {rankings.length === 0 ? '추천된 음식이 없어요' : '뽑기!'}
+                        {rankings.length === 0 ? '추천된 음식이 없어요' : '🎲 순위 뽑기!'}
                       </motion.button>
                     </motion.div>
                   )}
                 </AnimatePresence>
               </motion.div>
 
-              {/* 순위표 */}
+              {/* 현재 추천 현황 */}
               <motion.div
                 className="glass-card rounded-2xl p-8"
                 initial={{ opacity: 0, y: 20 }}
@@ -264,7 +327,7 @@ export default function LotteryPage() {
                 transition={{ delay: 0.2 }}
               >
                 <h2 className="text-2xl font-bold mb-6 text-white flex items-center gap-2">
-                  <span>🏆</span> 현재 순위
+                  <span>📊</span> 현재 추천 현황
                 </h2>
 
                 {isLoading ? (
@@ -297,13 +360,12 @@ export default function LotteryPage() {
 
                         <div className="relative flex items-center justify-between">
                           <div className="flex items-center gap-4">
-                            <span className="text-2xl">{getRankBadge(ranking.rank)}</span>
                             <div>
                               <h3 className="text-lg font-bold text-white">
                                 {ranking.foodName}
                                 {ranking.voteCount >= 5 && (
                                   <span className="ml-2 text-xs bg-yellow-400 text-black px-2 py-0.5 rounded-full">
-                                    필수 1순위
+                                    필수 상위권
                                   </span>
                                 )}
                               </h3>
@@ -317,7 +379,7 @@ export default function LotteryPage() {
                               {ranking.voteCount}표
                             </p>
                             <p className="text-sm text-gray-400">
-                              {(ranking.probability * 100).toFixed(1)}%
+                              확률 {(ranking.probability * 100).toFixed(1)}%
                             </p>
                           </div>
                         </div>
@@ -328,8 +390,8 @@ export default function LotteryPage() {
 
                 <div className="mt-6 p-4 bg-yellow-400/10 rounded-xl border border-yellow-400/20">
                   <p className="text-sm text-yellow-300">
-                    💡 <strong>규칙:</strong> 5인 이상 득표한 음식은 무조건 1순위!
-                    동일 음식 추천 시 가산점이 적용됩니다.
+                    💡 <strong>규칙:</strong> 5인 이상 득표한 음식은 무조건 상위권 배치!
+                    득표수가 많을수록 높은 순위에 뽑힐 확률이 올라갑니다.
                   </p>
                 </div>
               </motion.div>
