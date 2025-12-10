@@ -38,7 +38,12 @@ export default function RecommendPage() {
 
   const fetchRecommendations = async () => {
     try {
-      const res = await fetch('/api/recommendations')
+      const res = await fetch('/api/recommendations', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
       const data = await res.json()
       if (res.ok) {
         setRecommendations(data)

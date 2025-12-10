@@ -57,10 +57,17 @@ export default function LotteryPage() {
 
   const fetchRankings = async () => {
     try {
-      const res = await fetch('/api/lottery')
+      const res = await fetch('/api/lottery', {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+        },
+      })
       const data = await res.json()
       if (res.ok) {
         setRankings(data.rankings || [])
+      } else {
+        console.error('API error:', data.error)
       }
     } catch (err) {
       console.error('Failed to fetch rankings:', err)
