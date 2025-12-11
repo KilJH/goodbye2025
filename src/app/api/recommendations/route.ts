@@ -15,8 +15,11 @@ interface GroupedRecommendation {
   dislikes: number
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const { searchParams } = new URL(request.url)
+    const userId = searchParams.get('userId')
+
     const recommendations = await prisma.foodRecommendation.findMany({
       include: {
         user: {
@@ -63,6 +66,9 @@ export async function GET() {
 
     // 음식별 투표 집계
     const votesByFood = new Map<string, { likes: number; dislikes: number }>()
+    // 사용자별 투표 상태
+    const userVotesByFood = new Map<string, 'like' | 'dislike'>()
+
     for (const vote of allVotes) {
       const existing = votesByFood.get(vote.foodName) || { likes: 0, dislikes: 0 }
       if (vote.voteType === 'like') {
@@ -71,6 +77,11 @@ export async function GET() {
         existing.dislikes++
       }
       votesByFood.set(vote.foodName, existing)
+
+      // 현재 사용자의 투표 상태 저장
+      if (userId && vote.userId === userId) {
+        userVotesByFood.set(vote.foodName, vote.voteType as 'like' | 'dislike')
+      }
     }
 
     // 그룹화된 결과를 배열로 변환 (최신순 정렬)
@@ -92,6 +103,7 @@ export async function GET() {
     return NextResponse.json({
       recommendations: grouped,
       totalCount: recommendations.length,
+      userVotes: Object.fromEntries(userVotesByFood),
     })
   } catch (error) {
     console.error('Get recommendations error:', error)

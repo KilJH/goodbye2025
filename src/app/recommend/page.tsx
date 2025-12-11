@@ -49,7 +49,10 @@ export default function RecommendPage() {
   const fetchRecommendations = useCallback(async (isInitial = false) => {
     if (isInitial) setIsLoadingList(true)
     try {
-      const res = await fetch('/api/recommendations', {
+      const url = userId
+        ? `/api/recommendations?userId=${userId}`
+        : '/api/recommendations'
+      const res = await fetch(url, {
         cache: 'no-store',
         headers: {
           'Cache-Control': 'no-cache',
@@ -79,13 +82,18 @@ export default function RecommendPage() {
 
         setRecommendations(newRecs)
         setTotalCount(data.totalCount)
+
+        // 사용자 투표 상태 초기화
+        if (data.userVotes) {
+          setUserVotes(data.userVotes)
+        }
       }
     } catch (err) {
       console.error('Failed to fetch recommendations:', err)
     } finally {
       if (isInitial) setIsLoadingList(false)
     }
-  }, [])
+  }, [userId])
 
   // 초기 로드
   useEffect(() => {
