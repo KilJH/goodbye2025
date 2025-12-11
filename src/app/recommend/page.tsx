@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Sparkles from '@/components/Sparkles'
@@ -8,6 +8,7 @@ import Header from '@/components/Header'
 import { SkeletonCard, Spinner } from '@/components/Skeleton'
 import { useUserStore } from '@/lib/store'
 import { generateFoodTags } from '@/lib/foodTagger'
+import { supabase } from '@/lib/supabase'
 
 interface GroupedRecommendation {
   foodName: string
@@ -37,10 +38,9 @@ export default function RecommendPage() {
   const [totalCount, setTotalCount] = useState(0)
   const [userVotes, setUserVotes] = useState<UserVotes>({})
   const [votingFood, setVotingFood] = useState<string | null>(null)
+  const [prevFoodNames, setPrevFoodNames] = useState<Set<string>>(new Set())
   const router = useRouter()
   const { userId, userName } = useUserStore()
-  const pollingRef = useRef<NodeJS.Timeout | null>(null)
-  const prevFoodNamesRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     setIsHydrated(true)
@@ -60,22 +60,23 @@ export default function RecommendPage() {
         const newRecs = data.recommendations as GroupedRecommendation[]
 
         // 새로 추가된 음식 감지 (초기 로드가 아닐 때)
-        if (!isInitial && prevFoodNamesRef.current.size > 0) {
-          const currentFoodNames = new Set(newRecs.map(r => r.foodName))
-          for (const rec of newRecs) {
-            // 새로운 음식이거나 추천자 수가 변경된 경우
-            const prevRec = recommendations.find(r => r.foodName === rec.foodName)
-            if (!prevFoodNamesRef.current.has(rec.foodName) ||
-                (prevRec && prevRec.recommenders.length < rec.recommenders.length)) {
-              setNewlyAddedFood(rec.foodName)
-              setTimeout(() => setNewlyAddedFood(null), 2000)
-              break
+        if (!isInitial) {
+          setPrevFoodNames(prev => {
+            if (prev.size > 0) {
+              for (const rec of newRecs) {
+                if (!prev.has(rec.foodName)) {
+                  setNewlyAddedFood(rec.foodName)
+                  setTimeout(() => setNewlyAddedFood(null), 2000)
+                  break
+                }
+              }
             }
-          }
+            return new Set(newRecs.map(r => r.foodName))
+          })
+        } else {
+          setPrevFoodNames(new Set(newRecs.map(r => r.foodName)))
         }
 
-        // 현재 음식 이름들 저장
-        prevFoodNamesRef.current = new Set(newRecs.map(r => r.foodName))
         setRecommendations(newRecs)
         setTotalCount(data.totalCount)
       }
@@ -84,23 +85,35 @@ export default function RecommendPage() {
     } finally {
       if (isInitial) setIsLoadingList(false)
     }
-  }, [recommendations])
+  }, [])
 
   // 초기 로드
   useEffect(() => {
     fetchRecommendations(true)
-  }, [])
+  }, [fetchRecommendations])
 
-  // 실시간 polling (3초마다)
+  // Supabase Realtime 구독
   useEffect(() => {
-    pollingRef.current = setInterval(() => {
-      fetchRecommendations(false)
-    }, 3000)
+    const channel = supabase
+      .channel('recommendations-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'FoodRecommendation' },
+        () => {
+          fetchRecommendations(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'FoodVote' },
+        () => {
+          fetchRecommendations(false)
+        }
+      )
+      .subscribe()
 
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-      }
+      supabase.removeChannel(channel)
     }
   }, [fetchRecommendations])
 

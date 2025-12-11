@@ -1,12 +1,13 @@
 'use client'
 
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Confetti from '@/components/Confetti'
 import Sparkles from '@/components/Sparkles'
 import Header from '@/components/Header'
 import { SkeletonRankingCard, Spinner } from '@/components/Skeleton'
 import { EVENT_INFO } from '@/lib/constants'
+import { supabase } from '@/lib/supabase'
 
 interface FoodRanking {
   foodName: string
@@ -25,8 +26,7 @@ export default function LotteryPage() {
   const [showResult, setShowResult] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [updatedFoods, setUpdatedFoods] = useState<Set<string>>(new Set())
-  const pollingRef = useRef<NodeJS.Timeout | null>(null)
-  const prevRankingsRef = useRef<Map<string, number>>(new Map())
+  const [prevRankings, setPrevRankings] = useState<Map<string, number>>(new Map())
 
   // 시간 체크
   useEffect(() => {
@@ -68,23 +68,27 @@ export default function LotteryPage() {
         const newRankings = data.rankings || []
 
         // 변경된 음식 감지 (초기 로드가 아닐 때)
-        if (!isInitial && prevRankingsRef.current.size > 0) {
-          const updated = new Set<string>()
-          for (const ranking of newRankings) {
-            const prevVoteCount = prevRankingsRef.current.get(ranking.foodName)
-            // 새로운 음식이거나 득표수가 변경된 경우
-            if (prevVoteCount === undefined || prevVoteCount !== ranking.voteCount) {
-              updated.add(ranking.foodName)
+        if (!isInitial) {
+          setPrevRankings(prev => {
+            if (prev.size > 0) {
+              const updated = new Set<string>()
+              for (const ranking of newRankings) {
+                const prevVoteCount = prev.get(ranking.foodName)
+                if (prevVoteCount === undefined || prevVoteCount !== ranking.voteCount) {
+                  updated.add(ranking.foodName)
+                }
+              }
+              if (updated.size > 0) {
+                setUpdatedFoods(updated)
+                setTimeout(() => setUpdatedFoods(new Set()), 2000)
+              }
             }
-          }
-          if (updated.size > 0) {
-            setUpdatedFoods(updated)
-            setTimeout(() => setUpdatedFoods(new Set()), 2000)
-          }
+            return new Map(newRankings.map((r: FoodRanking) => [r.foodName, r.voteCount]))
+          })
+        } else {
+          setPrevRankings(new Map(newRankings.map((r: FoodRanking) => [r.foodName, r.voteCount])))
         }
 
-        // 현재 상태 저장
-        prevRankingsRef.current = new Map(newRankings.map((r: FoodRanking) => [r.foodName, r.voteCount]))
         setRankings(newRankings)
       } else {
         console.error('API error:', data.error)
@@ -101,16 +105,28 @@ export default function LotteryPage() {
     fetchRankings(true)
   }, [fetchRankings])
 
-  // 실시간 polling (3초마다)
+  // Supabase Realtime 구독
   useEffect(() => {
-    pollingRef.current = setInterval(() => {
-      fetchRankings(false)
-    }, 3000)
+    const channel = supabase
+      .channel('lottery-changes')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'FoodRecommendation' },
+        () => {
+          fetchRankings(false)
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'FoodVote' },
+        () => {
+          fetchRankings(false)
+        }
+      )
+      .subscribe()
 
     return () => {
-      if (pollingRef.current) {
-        clearInterval(pollingRef.current)
-      }
+      supabase.removeChannel(channel)
     }
   }, [fetchRankings])
 
