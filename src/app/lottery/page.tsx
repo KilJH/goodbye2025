@@ -1,13 +1,12 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import Confetti from '@/components/Confetti'
 import Sparkles from '@/components/Sparkles'
 import Header from '@/components/Header'
 import { SkeletonRankingCard, Spinner } from '@/components/Skeleton'
 import { EVENT_INFO } from '@/lib/constants'
-import { supabase } from '@/lib/supabase'
 
 interface FoodRanking {
   foodName: string
@@ -27,6 +26,8 @@ export default function LotteryPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [updatedFoods, setUpdatedFoods] = useState<Set<string>>(new Set())
   const [prevRankings, setPrevRankings] = useState<Map<string, number>>(new Map())
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const isVisibleRef = useRef(true)
 
   // 시간 체크
   useEffect(() => {
@@ -105,28 +106,31 @@ export default function LotteryPage() {
     fetchRankings(true)
   }, [fetchRankings])
 
-  // Supabase Realtime 구독
+  // Polling 최적화 (10초 간격 + visibility check)
   useEffect(() => {
-    const channel = supabase
-      .channel('lottery-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'FoodRecommendation' },
-        () => {
+    const startPolling = () => {
+      pollingRef.current = setInterval(() => {
+        if (isVisibleRef.current) {
           fetchRankings(false)
         }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'FoodVote' },
-        () => {
-          fetchRankings(false)
-        }
-      )
-      .subscribe()
+      }, 10000) // 10초
+    }
+
+    const handleVisibilityChange = () => {
+      isVisibleRef.current = !document.hidden
+      if (!document.hidden) {
+        fetchRankings(false)
+      }
+    }
+
+    startPolling()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-      supabase.removeChannel(channel)
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [fetchRankings])
 

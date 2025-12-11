@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { useRouter } from 'next/navigation'
 import Sparkles from '@/components/Sparkles'
@@ -8,7 +8,6 @@ import Header from '@/components/Header'
 import { SkeletonCard, Spinner } from '@/components/Skeleton'
 import { useUserStore } from '@/lib/store'
 import { generateFoodTags } from '@/lib/foodTagger'
-import { supabase } from '@/lib/supabase'
 
 interface GroupedRecommendation {
   foodName: string
@@ -37,10 +36,11 @@ export default function RecommendPage() {
   const [newlyAddedFood, setNewlyAddedFood] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
   const [userVotes, setUserVotes] = useState<UserVotes>({})
-  const [votingFood, setVotingFood] = useState<string | null>(null)
   const [prevFoodNames, setPrevFoodNames] = useState<Set<string>>(new Set())
   const router = useRouter()
   const { userId, userName } = useUserStore()
+  const pollingRef = useRef<NodeJS.Timeout | null>(null)
+  const isVisibleRef = useRef(true)
 
   useEffect(() => {
     setIsHydrated(true)
@@ -92,28 +92,32 @@ export default function RecommendPage() {
     fetchRecommendations(true)
   }, [fetchRecommendations])
 
-  // Supabase Realtime 구독
+  // Polling 최적화 (10초 간격 + visibility check)
   useEffect(() => {
-    const channel = supabase
-      .channel('recommendations-changes')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'FoodRecommendation' },
-        () => {
+    const startPolling = () => {
+      pollingRef.current = setInterval(() => {
+        if (isVisibleRef.current) {
           fetchRecommendations(false)
         }
-      )
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'FoodVote' },
-        () => {
-          fetchRecommendations(false)
-        }
-      )
-      .subscribe()
+      }, 10000) // 10초
+    }
+
+    const handleVisibilityChange = () => {
+      isVisibleRef.current = !document.hidden
+      if (!document.hidden) {
+        // 탭이 다시 활성화되면 즉시 fetch
+        fetchRecommendations(false)
+      }
+    }
+
+    startPolling()
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
     return () => {
-      supabase.removeChannel(channel)
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
     }
   }, [fetchRecommendations])
 
@@ -179,35 +183,57 @@ export default function RecommendPage() {
     }
   }
 
-  // 투표 처리
-  const handleVote = async (foodName: string, voteType: 'like' | 'dislike') => {
+  // 투표 처리 (낙관적 업데이트)
+  const handleVote = async (targetFoodName: string, voteType: 'like' | 'dislike') => {
     if (!userId) {
       setError('먼저 이름을 입력해주세요!')
       router.push('/')
       return
     }
 
-    setVotingFood(foodName)
+    const prevUserVote = userVotes[targetFoodName]
+    const prevRecommendations = [...recommendations]
+
+    // 낙관적 업데이트: 즉시 UI 반영
+    const newUserVote = prevUserVote === voteType ? null : voteType
+    setUserVotes(prev => ({ ...prev, [targetFoodName]: newUserVote }))
+
+    // recommendations도 즉시 업데이트
+    setRecommendations(prev => prev.map(rec => {
+      if (rec.foodName !== targetFoodName) return rec
+
+      let likes = rec.likes
+      let dislikes = rec.dislikes
+
+      // 이전 투표 제거
+      if (prevUserVote === 'like') likes--
+      if (prevUserVote === 'dislike') dislikes--
+
+      // 새 투표 추가 (같은 버튼이면 취소이므로 추가 안함)
+      if (newUserVote === 'like') likes++
+      if (newUserVote === 'dislike') dislikes++
+
+      return { ...rec, likes, dislikes }
+    }))
+
+    // 서버에 요청 (백그라운드)
     try {
       const res = await fetch('/api/vote', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ foodName, voteType, userId }),
+        body: JSON.stringify({ foodName: targetFoodName, voteType, userId }),
       })
 
-      const data = await res.json()
-      if (res.ok) {
-        setUserVotes(prev => ({
-          ...prev,
-          [foodName]: data.voteType,
-        }))
-        // 즉시 새로고침
-        fetchRecommendations(false)
+      if (!res.ok) {
+        // 실패시 롤백
+        setUserVotes(prev => ({ ...prev, [targetFoodName]: prevUserVote }))
+        setRecommendations(prevRecommendations)
       }
     } catch (err) {
+      // 에러시 롤백
       console.error('Vote error:', err)
-    } finally {
-      setVotingFood(null)
+      setUserVotes(prev => ({ ...prev, [targetFoodName]: prevUserVote }))
+      setRecommendations(prevRecommendations)
     }
   }
 
@@ -438,7 +464,6 @@ export default function RecommendPage() {
                         <div className="flex items-center gap-2">
                           <motion.button
                             onClick={() => handleVote(rec.foodName, 'like')}
-                            disabled={votingFood === rec.foodName}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-all ${
                               userVotes[rec.foodName] === 'like'
                                 ? 'bg-green-500/30 text-green-300 border border-green-500'
@@ -451,7 +476,6 @@ export default function RecommendPage() {
                           </motion.button>
                           <motion.button
                             onClick={() => handleVote(rec.foodName, 'dislike')}
-                            disabled={votingFood === rec.foodName}
                             className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-all ${
                               userVotes[rec.foodName] === 'dislike'
                                 ? 'bg-red-500/30 text-red-300 border border-red-500'
