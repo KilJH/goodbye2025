@@ -11,6 +11,8 @@ interface GroupedRecommendation {
   recommenders: string[]
   count: number
   latestAt: string
+  likes: number
+  dislikes: number
 }
 
 export async function GET() {
@@ -56,15 +58,35 @@ export async function GET() {
       }
     }
 
+    // 모든 투표 가져오기
+    const allVotes = await prisma.foodVote.findMany()
+
+    // 음식별 투표 집계
+    const votesByFood = new Map<string, { likes: number; dislikes: number }>()
+    for (const vote of allVotes) {
+      const existing = votesByFood.get(vote.foodName) || { likes: 0, dislikes: 0 }
+      if (vote.voteType === 'like') {
+        existing.likes++
+      } else {
+        existing.dislikes++
+      }
+      votesByFood.set(vote.foodName, existing)
+    }
+
     // 그룹화된 결과를 배열로 변환 (최신순 정렬)
     const grouped: GroupedRecommendation[] = foodGroups
-      .map((group) => ({
-        foodName: group.representativeName,
-        tags: group.tags,
-        recommenders: Array.from(group.recommenders),
-        count: group.count,
-        latestAt: group.latestAt.toISOString(),
-      }))
+      .map((group) => {
+        const votes = votesByFood.get(group.representativeName) || { likes: 0, dislikes: 0 }
+        return {
+          foodName: group.representativeName,
+          tags: group.tags,
+          recommenders: Array.from(group.recommenders),
+          count: group.count,
+          latestAt: group.latestAt.toISOString(),
+          likes: votes.likes,
+          dislikes: votes.dislikes,
+        }
+      })
       .sort((a, b) => new Date(b.latestAt).getTime() - new Date(a.latestAt).getTime())
 
     return NextResponse.json({

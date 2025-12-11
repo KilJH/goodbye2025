@@ -18,6 +18,7 @@ model User {
   createdAt DateTime @default(now())
 
   recommendations FoodRecommendation[]
+  votes           FoodVote[]
 }
 
 // 음식 추천 모델
@@ -29,6 +30,19 @@ model FoodRecommendation {
   user      User     @relation(fields: [userId], references: [id])
   createdAt DateTime @default(now())
 
+  @@index([foodName])
+}
+
+// 음식 좋아요/싫어요 투표 모델
+model FoodVote {
+  id        String   @id @default(cuid())
+  foodName  String   // 음식 이름 (그룹화된 대표 이름)
+  voteType  String   // "like" 또는 "dislike"
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  createdAt DateTime @default(now())
+
+  @@unique([foodName, userId]) // 한 사용자가 한 음식에 한 번만 투표
   @@index([foodName])
 }
 

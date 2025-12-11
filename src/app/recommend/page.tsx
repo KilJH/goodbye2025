@@ -15,6 +15,12 @@ interface GroupedRecommendation {
   recommenders: string[]
   count: number
   latestAt: string
+  likes: number
+  dislikes: number
+}
+
+interface UserVotes {
+  [foodName: string]: 'like' | 'dislike' | null
 }
 
 export default function RecommendPage() {
@@ -29,6 +35,8 @@ export default function RecommendPage() {
   const [isLoadingList, setIsLoadingList] = useState(true)
   const [newlyAddedFood, setNewlyAddedFood] = useState<string | null>(null)
   const [totalCount, setTotalCount] = useState(0)
+  const [userVotes, setUserVotes] = useState<UserVotes>({})
+  const [votingFood, setVotingFood] = useState<string | null>(null)
   const router = useRouter()
   const { userId, userName } = useUserStore()
   const pollingRef = useRef<NodeJS.Timeout | null>(null)
@@ -155,6 +163,38 @@ export default function RecommendPage() {
       setError(err instanceof Error ? err.message : '오류가 발생했습니다')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  // 투표 처리
+  const handleVote = async (foodName: string, voteType: 'like' | 'dislike') => {
+    if (!userId) {
+      setError('먼저 이름을 입력해주세요!')
+      router.push('/')
+      return
+    }
+
+    setVotingFood(foodName)
+    try {
+      const res = await fetch('/api/vote', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ foodName, voteType, userId }),
+      })
+
+      const data = await res.json()
+      if (res.ok) {
+        setUserVotes(prev => ({
+          ...prev,
+          [foodName]: data.voteType,
+        }))
+        // 즉시 새로고침
+        fetchRecommendations(false)
+      }
+    } catch (err) {
+      console.error('Vote error:', err)
+    } finally {
+      setVotingFood(null)
     }
   }
 
@@ -371,15 +411,45 @@ export default function RecommendPage() {
                           </p>
                         </div>
                       </div>
-                      <div className="flex flex-wrap gap-2">
-                        {rec.tags.map((tag) => (
-                          <span
-                            key={tag}
-                            className={`px-2 py-0.5 rounded-full text-xs border ${getTagColor(tag)}`}
+                      <div className="flex items-center justify-between mt-3">
+                        <div className="flex flex-wrap gap-2">
+                          {rec.tags.map((tag) => (
+                            <span
+                              key={tag}
+                              className={`px-2 py-0.5 rounded-full text-xs border ${getTagColor(tag)}`}
+                            >
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <motion.button
+                            onClick={() => handleVote(rec.foodName, 'like')}
+                            disabled={votingFood === rec.foodName}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                              userVotes[rec.foodName] === 'like'
+                                ? 'bg-green-500/30 text-green-300 border border-green-500'
+                                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-green-500/20 hover:text-green-300'
+                            }`}
+                            whileTap={{ scale: 0.95 }}
                           >
-                            {tag}
-                          </span>
-                        ))}
+                            <span>👍</span>
+                            <span>{rec.likes}</span>
+                          </motion.button>
+                          <motion.button
+                            onClick={() => handleVote(rec.foodName, 'dislike')}
+                            disabled={votingFood === rec.foodName}
+                            className={`flex items-center gap-1 px-3 py-1.5 rounded-lg text-sm transition-all ${
+                              userVotes[rec.foodName] === 'dislike'
+                                ? 'bg-red-500/30 text-red-300 border border-red-500'
+                                : 'bg-white/5 text-gray-400 border border-white/10 hover:bg-red-500/20 hover:text-red-300'
+                            }`}
+                            whileTap={{ scale: 0.95 }}
+                          >
+                            <span>👎</span>
+                            <span>{rec.dislikes}</span>
+                          </motion.button>
+                        </div>
                       </div>
                     </motion.div>
                   ))}

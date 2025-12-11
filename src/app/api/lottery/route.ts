@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
+import { isSameFood } from '@/lib/foodTagger'
 
 export const dynamic = 'force-dynamic'
 export const revalidate = 0
@@ -10,6 +11,8 @@ interface FoodRanking {
   probability: number
   rank: number
   voters: string[]
+  likes: number
+  dislikes: number
 }
 
 export async function GET() {
@@ -23,22 +26,42 @@ export async function GET() {
       },
     })
 
-    // 음식별로 그룹화
-    const foodGroups = new Map<string, { count: number; voters: string[] }>()
+    // 모든 투표 가져오기
+    const allVotes = await prisma.foodVote.findMany()
+
+    // 음식별로 그룹화 (유사한 이름도 같은 그룹으로)
+    const foodGroups: {
+      representativeName: string
+      count: number
+      voters: Set<string>
+    }[] = []
 
     for (const rec of recommendations) {
-      const existing = foodGroups.get(rec.foodName)
-      if (existing) {
-        existing.count++
-        if (!existing.voters.includes(rec.user.name)) {
-          existing.voters.push(rec.user.name)
-        }
+      // 기존 그룹에서 유사한 음식 찾기
+      let foundGroup = foodGroups.find(group => isSameFood(group.representativeName, rec.foodName))
+
+      if (foundGroup) {
+        foundGroup.count++
+        foundGroup.voters.add(rec.user.name)
       } else {
-        foodGroups.set(rec.foodName, {
+        foodGroups.push({
+          representativeName: rec.foodName,
           count: 1,
-          voters: [rec.user.name],
+          voters: new Set([rec.user.name]),
         })
       }
+    }
+
+    // 음식별 투표 집계
+    const votesByFood = new Map<string, { likes: number; dislikes: number }>()
+    for (const vote of allVotes) {
+      const existing = votesByFood.get(vote.foodName) || { likes: 0, dislikes: 0 }
+      if (vote.voteType === 'like') {
+        existing.likes++
+      } else {
+        existing.dislikes++
+      }
+      votesByFood.set(vote.foodName, existing)
     }
 
     // 순위 및 확률 계산
@@ -46,21 +69,31 @@ export async function GET() {
     let totalWeight = 0
 
     // 먼저 가중치 계산
-    for (const [foodName, data] of foodGroups) {
-      // 기본 가중치: 득표수
-      // 가산점: 득표수가 많을수록 추가 가중치
-      const baseWeight = data.count
-      const bonusWeight = Math.pow(data.count, 1.5) // 득표수의 1.5제곱
-      const weight = baseWeight + bonusWeight
+    for (const group of foodGroups) {
+      const votes = votesByFood.get(group.representativeName) || { likes: 0, dislikes: 0 }
+
+      // 기본 가중치: 추천수
+      const baseWeight = group.count
+      // 추천수 보너스: 추천수의 1.5제곱
+      const recommendBonus = Math.pow(group.count, 1.5)
+      // 좋아요 보너스: 좋아요 1개당 +0.5
+      const likeBonus = votes.likes * 0.5
+      // 싫어요 페널티: 싫어요 1개당 -0.3
+      const dislikePenalty = votes.dislikes * 0.3
+
+      // 최종 가중치 (최소 0.1 보장)
+      const weight = Math.max(0.1, baseWeight + recommendBonus + likeBonus - dislikePenalty)
 
       totalWeight += weight
 
       rankings.push({
-        foodName,
-        voteCount: data.count,
+        foodName: group.representativeName,
+        voteCount: group.count,
         probability: weight, // 임시로 weight 저장
         rank: 0,
-        voters: data.voters,
+        voters: Array.from(group.voters),
+        likes: votes.likes,
+        dislikes: votes.dislikes,
       })
     }
 
